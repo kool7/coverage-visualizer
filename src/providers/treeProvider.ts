@@ -1,0 +1,72 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { CoverageReport } from '../parsers/coverageParser.js';
+import { getConfig } from '../config.js';
+
+export class CoverageTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  private report: CoverageReport | undefined;
+  private _onDidChangeTreeData = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  setReport(report: CoverageReport | undefined) {
+    this.report = report;
+    this._onDidChangeTreeData.fire();
+  }
+
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(): vscode.TreeItem[] {
+    if (!this.report) {
+      const placeholder = new vscode.TreeItem(
+        'No coverage — run "Coverage Visualizer: Show Coverage"',
+        vscode.TreeItemCollapsibleState.None,
+      );
+      placeholder.iconPath = new vscode.ThemeIcon('info');
+      return [placeholder];
+    }
+
+    const cfg = getConfig();
+    const { percentCovered, coveredStatements, numStatements } = this.report.totals;
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+
+    const summaryIcon = percentCovered >= cfg.thresholdGood ? 'shield'
+      : percentCovered >= cfg.thresholdWarn ? 'warning' : 'error';
+    const summary = new vscode.TreeItem(
+      `Overall: ${percentCovered.toFixed(1)}% (${coveredStatements}/${numStatements})`,
+      vscode.TreeItemCollapsibleState.None,
+    );
+    summary.iconPath = new vscode.ThemeIcon(summaryIcon);
+    summary.tooltip = `Source: ${this.report.source}`;
+
+    const fileItems = Object.entries(this.report.files)
+      .sort(([, a], [, b]) => a.percentCovered - b.percentCovered)
+      .map(([filePath, data]) => {
+        const label = filePath.split('/').pop() ?? filePath;
+        const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+        const total = data.executedLines.length + data.missingLines.length;
+        item.description = `${data.percentCovered.toFixed(1)}%  ${data.executedLines.length}/${total}`;
+        item.tooltip = new vscode.MarkdownString(
+          `**${filePath}**\n\n${data.executedLines.length}/${total} lines covered`
+        );
+        item.iconPath = new vscode.ThemeIcon(
+          data.percentCovered >= cfg.thresholdGood ? 'pass'
+            : data.percentCovered >= cfg.thresholdWarn ? 'warning' : 'error'
+        );
+
+        const absolutePath = path.isAbsolute(filePath)
+          ? filePath
+          : path.join(workspaceRoot, filePath);
+
+        item.command = {
+          command: 'vscode.open',
+          title: 'Open File',
+          arguments: [vscode.Uri.file(absolutePath)],
+        };
+        return item;
+      });
+
+    return [summary, ...fileItems];
+  }
+}
