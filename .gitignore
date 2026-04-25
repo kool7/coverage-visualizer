@@ -17,6 +17,9 @@ tests/**/*.js.map
 # Local test project (not part of the extension)
 demo-python-project/
 
+# Local dev scripts (not part of the extension)
+scripts/verify-sqlite-parse.mjs
+
 # macOS
 .DS_Store
 
