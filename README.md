@@ -1,8 +1,8 @@
 # Python Coverage Visualizer
 
-> See which lines your tests actually hit — inline, in the editor, the moment you run them.
+> Know which lines your tests missed — without leaving the editor.
 
-You run your tests. You get a percentage. But which lines actually ran? Coverage Visualizer highlights them inline — green for covered, red for missed — right where you write code. No browser. No switching tabs. No mental mapping from a report file back to your editor.
+You run `pytest`. You get 73%. But 27% of what? Finding uncovered lines means opening a browser report, hunting for your file, and mentally mapping line numbers back to your code. Coverage Visualizer cuts all of that — green and red highlights appear inline, right where you write, the moment you run your tests.
 
 ![Coverage Visualizer in action](assets/demo.gif)
 
@@ -10,19 +10,25 @@ You run your tests. You get a percentage. But which lines actually ran? Coverage
 
 ## Features
 
-**Inline highlights** — green and red line backgrounds appear across every open Python file the moment you load coverage. Overview ruler markers let you scan the whole file at a glance.
+**Inline highlights** — green line backgrounds for covered lines, red for missed, with overview ruler markers so you can scan an entire file at a glance without scrolling.
 
-**CodeLens** — a live coverage percentage floats above every `def` and `class` as you work, so you never have to wonder what a function's coverage is.
+<!-- demo GIF: record opening a Python file after Show Coverage, showing green/red line backgrounds appearing -->
 
-**Hover tooltips** — hover any highlighted line to see a clear ✓ Covered or ✗ Not covered message.
+**CodeLens** — a live coverage percentage appears above every `def` and `class` as you work. See a function's coverage without opening any report.
 
-**Interactive dashboard** — an SVG ring chart, overall stats, and a sortable file table. Click any file to jump straight to it.
+<!-- demo GIF: record CodeLens percentages above def/class lines -->
 
-**Sidebar tree view** — a persistent Coverage panel in the Explorer sidebar shows pass / warn / fail icons per file. Always visible, always current.
+**Hover tooltips** — hover any highlighted line for an instant ✓ Covered or ✗ Not covered message.
 
-**Status bar** — your total coverage percentage lives in the status bar. Click it to open the dashboard.
+**Interactive dashboard** — an SVG ring chart, overall stats, and a sortable file table. Click any filename to jump straight to it in the editor.
 
-**Auto-reload** — file watchers detect changes to your coverage file and refresh all decorations instantly. Run your tests, save, done.
+<!-- demo GIF: record opening dashboard and clicking a file row -->
+
+**Sidebar tree view** — a persistent Coverage panel in the Explorer sidebar shows every file with a pass / warn / fail icon. Always visible, always current.
+
+**Status bar** — your total coverage percentage sits in the status bar. Click it to open the dashboard.
+
+**Auto-reload** — file watchers detect changes to your coverage file and refresh all decorations instantly. Run your tests, save — done.
 
 ---
 
@@ -42,43 +48,40 @@ No Python runtime required — the extension reads all three formats natively.
 
 Search for **Python Coverage Visualizer** in the Extensions panel (`Cmd+Shift+X` / `Ctrl+Shift+X`) and click Install.
 
-Or install from a VSIX file:
-
-```bash
-code --install-extension coverage-visualizer-x.x.x.vsix
-```
-
 ---
 
 ## Quick Start
 
-```bash
-# 1. Install pytest-cov in your Python project
-pip install pytest-cov
+1. Install pytest-cov in your Python project:
+   ```bash
+   pip install pytest-cov
+   ```
 
-# 2. Run your tests to generate coverage
-pytest --cov=. --cov-report=json
-```
+2. Run your tests and generate coverage:
+   ```bash
+   pytest --cov=. --cov-report=json
+   ```
 
-Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run **Coverage Visualizer: Show Coverage**.
+3. In VS Code, open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run:
+   **Coverage Visualizer: Show Coverage**
 
-Green and red highlights appear on all open Python files immediately.
+Green and red highlights appear across all open Python files immediately.
 
 ---
 
 ## Commands
 
-| Command                               | What it does                                      |
-| ------------------------------------- | ------------------------------------------------- |
-| `Coverage Visualizer: Show Coverage`  | Load coverage and apply highlights to open files  |
-| `Coverage Visualizer: Show Dashboard` | Open the interactive coverage dashboard           |
-| `Coverage Visualizer: Clear Coverage` | Remove all highlights and reset state             |
+| Command                               | What it does                                     |
+| ------------------------------------- | ------------------------------------------------ |
+| `Coverage Visualizer: Show Coverage`  | Load coverage and apply highlights to open files |
+| `Coverage Visualizer: Show Dashboard` | Open the interactive coverage dashboard          |
+| `Coverage Visualizer: Clear Coverage` | Remove all highlights and reset state            |
 
 ---
 
 ## Configuration
 
-Open **Settings** (`Cmd+,`) and search for **Coverage Visualizer**, or edit `settings.json` directly:
+Open **Settings** (`Cmd+,`) and search for **Coverage Visualizer**, or add to `settings.json`:
 
 | Setting                                      | Default                   | Description                                            |
 | -------------------------------------------- | ------------------------- | ------------------------------------------------------ |
@@ -89,4 +92,4 @@ Open **Settings** (`Cmd+,`) and search for **Coverage Visualizer**, or edit `set
 | `coverageVisualizer.enableCodeLens`          | `true`                    | Show coverage % above `def` / `class` definitions      |
 | `coverageVisualizer.enableHoverMessages`     | `true`                    | Show covered / not-covered tooltip on hover            |
 | `coverageVisualizer.autoReloadOnChange`      | `true`                    | Auto-reload decorations when coverage files change     |
-
+| `coverageVisualizer.coverageJsonPath`        | `coverage.json`           | Path to coverage.json relative to workspace root       |
