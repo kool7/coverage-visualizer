@@ -5,3 +5,13 @@ src/**
 tsconfig.json
 **/*.map
 node_modules/**
+tests/**
+coverage/**
+scripts/**
+demo-python-project/**
+.github/**
+.claude/**
+CLAUDE.md
+DEV.md
+jest.config.ts
+*.vsix
