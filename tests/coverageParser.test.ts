@@ -144,9 +144,8 @@ describe('toLineRanges', () => {
 // ── parseCoverageSqlite ───────────────────────────────────────────────────────
 
 const sqliteFixture = path.join(__dirname, './fixtures/.coverage');
-// The fixture was generated with demo-python-project as workspace root.
-// Source files are at demo-python-project/src/*.py relative to that root.
-const sqliteWorkspaceRoot = path.join(__dirname, '../demo-python-project');
+// Source files live in tests/fixtures/src/ so the fixture is self-contained (no demo-python-project needed in CI).
+const sqliteWorkspaceRoot = path.join(__dirname, 'fixtures');
 
 describe('parseCoverageSqlite', () => {
   it('reads all three files from the SQLite database', async () => {
