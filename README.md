@@ -2,10 +2,6 @@
 
 > See which lines your tests actually hit — inline, in the editor, the moment you run them.
 
-[![CI](https://github.com/kool7/coverage-visualizer/actions/workflows/ci.yml/badge.svg)](https://github.com/kool7/coverage-visualizer/actions/workflows/ci.yml)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.90+-blue?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=kool7.coverage-visualizer)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 You run your tests. You get a percentage. But which lines actually ran? Coverage Visualizer highlights them inline — green for covered, red for missed — right where you write code. No browser. No switching tabs. No mental mapping from a report file back to your editor.
 
 ![Coverage Visualizer in action](assets/demo.gif)
@@ -94,14 +90,3 @@ Open **Settings** (`Cmd+,`) and search for **Coverage Visualizer**, or edit `set
 | `coverageVisualizer.enableHoverMessages`     | `true`                    | Show covered / not-covered tooltip on hover            |
 | `coverageVisualizer.autoReloadOnChange`      | `true`                    | Auto-reload decorations when coverage files change     |
 
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, architecture, test commands, and PR guidelines.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE)
