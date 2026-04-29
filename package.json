@@ -26,7 +26,10 @@
     "type": "git",
     "url": "https://github.com/kool7/coverage-visualizer"
   },
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:coverageVisualizer.filesView"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
