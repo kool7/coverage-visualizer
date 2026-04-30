@@ -2,7 +2,7 @@
   "name": "coverage-visualizer",
   "displayName": "Python Coverage Visualizer",
   "description": "Visualize Python test coverage inline in VS Code — highlights, CodeLens, dashboard, and sidebar tree view",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "kool7",
   "engines": {
     "vscode": "^1.90.0"
@@ -109,7 +109,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run bundle",
+    "bundle": "node esbuild.js",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
@@ -125,6 +126,7 @@
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.28.0",
     "eslint": "^8.0.0",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",
