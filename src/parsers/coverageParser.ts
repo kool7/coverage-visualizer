@@ -152,8 +152,12 @@ let sqlJsReady: Awaited<ReturnType<typeof initSqlJs>> | undefined;
 
 async function getSqlJs() {
   if (!sqlJsReady) {
-    // WASM file is copied to out/ by esbuild.js at build time, so it sits next to extension.js.
-    const wasmPath = path.join(__dirname, 'sql-wasm.wasm');
+    // In production (bundled): WASM is copied to out/ next to extension.js, __dirname points there.
+    // In dev/test (ts-jest): __dirname is src/parsers/, so fall back to node_modules.
+    const local = path.join(__dirname, 'sql-wasm.wasm');
+    const wasmPath = fs.existsSync(local)
+      ? local
+      : path.join(path.dirname(require.resolve('sql.js')), 'sql-wasm.wasm');
     sqlJsReady = await initSqlJs({ locateFile: () => wasmPath });
   }
   return sqlJsReady;
