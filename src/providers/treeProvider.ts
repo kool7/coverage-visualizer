@@ -41,14 +41,18 @@ export class CoverageTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     summary.tooltip = `Source: ${this.report.source}`;
 
     const fileItems = Object.entries(this.report.files)
+      .filter(([, data]) => data.executedLines.length + data.missingLines.length > 0)
       .sort(([, a], [, b]) => a.percentCovered - b.percentCovered)
       .map(([filePath, data]) => {
-        const label = filePath.split('/').pop() ?? filePath;
+        const displayPath = filePath.startsWith(workspaceRoot)
+          ? filePath.slice(workspaceRoot.length).replace(/^[\\/]/, '')
+          : filePath;
+        const label = displayPath.split(/[\\/]/).pop() ?? displayPath;
         const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
         const total = data.executedLines.length + data.missingLines.length;
         item.description = `${data.percentCovered.toFixed(1)}%  ${data.executedLines.length}/${total}`;
         item.tooltip = new vscode.MarkdownString(
-          `**${filePath}**\n\n${data.executedLines.length}/${total} lines covered`
+          `**${displayPath}**\n\n${data.executedLines.length}/${total} lines covered`
         );
         item.iconPath = new vscode.ThemeIcon(
           data.percentCovered >= cfg.thresholdGood ? 'pass'
