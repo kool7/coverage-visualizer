@@ -3,6 +3,12 @@ import * as path from 'path';
 import { CoverageReport } from '../parsers/coverageParser.js';
 import { getConfig } from '../config.js';
 
+function isTestFile(fsPath: string): boolean {
+  const basename = path.basename(fsPath);
+  return basename.startsWith('test_') || basename.endsWith('_test.py') ||
+    fsPath.split(/[\\/]/).some(seg => seg === 'tests' || seg === 'test');
+}
+
 let panel: vscode.WebviewPanel | undefined;
 
 export function showDashboard(report: CoverageReport, context: vscode.ExtensionContext) {
@@ -13,12 +19,18 @@ export function showDashboard(report: CoverageReport, context: vscode.ExtensionC
       'coverageDashboard',
       'Coverage Dashboard',
       vscode.ViewColumn.Beside,
-      { enableScripts: true, retainContextWhenHidden: true }
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'assets')],
+      }
     );
+    // ThemeIcon is supported for WebviewPanel.iconPath since VS Code 1.87 (we target 1.90+).
+    panel.iconPath = new vscode.ThemeIcon('graph');
     panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
   }
 
-  panel.webview.html = buildHtml(report);
+  panel.webview.html = buildHtml(report, panel.webview, context.extensionUri);
 
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
 
@@ -35,20 +47,47 @@ export function showDashboard(report: CoverageReport, context: vscode.ExtensionC
 }
 
 export function updateDashboard(report: CoverageReport) {
-  if (panel) panel.webview.html = buildHtml(report);
+  if (panel) panel.webview.html = buildHtml(report, panel.webview, undefined);
+}
+
+function buildHeaderIcon(extensionUri?: vscode.Uri): string {
+  if (extensionUri) {
+    const fs = require('fs') as typeof import('fs');
+    const svgUri = vscode.Uri.joinPath(extensionUri, 'assets', 'icon-dashboard.svg');
+    if (fs.existsSync(svgUri.fsPath)) {
+      let svg = fs.readFileSync(svgUri.fsPath, 'utf-8') as string;
+      // Inject class onto the root <svg> element so CSS can size/color it.
+      // Inlining lets currentColor inherit VS Code's foreground — works on both themes.
+      svg = svg.replace(/^(\s*<svg\b)/, '$1 class="h1-icon"');
+      return svg;
+    }
+  }
+  // Fallback: inline bar-chart SVG using currentColor so it themes automatically.
+  return `<svg class="h1-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="2" y="14" width="5" height="12" rx="1.5" fill="currentColor" opacity="0.5"/>
+    <rect x="10" y="8" width="5" height="18" rx="1.5" fill="currentColor" opacity="0.75"/>
+    <rect x="18" y="2" width="5" height="24" rx="1.5" fill="currentColor"/>
+    <line x1="2" y1="27" x2="26" y2="27" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>`;
 }
 
 function colorClass(pct: number, thresholdGood: number, thresholdWarn: number): string {
   return pct >= thresholdGood ? 'good' : pct >= thresholdWarn ? 'warn' : 'bad';
 }
 
-function buildHtml(report: CoverageReport): string {
-  const { percentCovered, coveredStatements, numStatements } = report.totals;
-  const { thresholdGood, thresholdWarn } = getConfig();
+function buildHtml(report: CoverageReport, webview?: vscode.Webview, extensionUri?: vscode.Uri): string {
+  const { thresholdGood, thresholdWarn, excludeTestFiles } = getConfig();
 
   const files = Object.entries(report.files)
+    .filter(([filePath]) => !excludeTestFiles || !isTestFile(filePath))
     .map(([filePath, data]) => ({ filePath, ...data }))
     .sort((a, b) => a.percentCovered - b.percentCovered);
+
+  // Recompute totals from the filtered file list so the ring and counts
+  // match what's shown in the table (e.g. when excludeTestFiles is on).
+  const coveredStatements = files.reduce((n, f) => n + f.executedLines.length, 0);
+  const numStatements = files.reduce((n, f) => n + f.executedLines.length + f.missingLines.length, 0);
+  const percentCovered = numStatements > 0 ? (coveredStatements / numStatements) * 100 : 0;
 
   const fileRows = files.map(f => {
     const pct = f.percentCovered.toFixed(1);
@@ -158,10 +197,12 @@ function buildHtml(report: CoverageReport): string {
   .pct.good, .pct.warn, .pct.bad { background: none; }
   .no-results { padding: 16px 10px; opacity: 0.5; font-style: italic; display: none; }
   .source-tag { margin-top: 20px; opacity: 0.4; font-size: 0.78em; }
+  h1 { display: flex; align-items: center; gap: 10px; }
+  .h1-icon { width: 28px; height: 28px; flex-shrink: 0; }
 </style>
 </head>
 <body>
-<h1>Coverage Dashboard</h1>
+<h1>${buildHeaderIcon(extensionUri)}Coverage Dashboard</h1>
 
 <div class="summary">
   <div class="ring-wrap">
