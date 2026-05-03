@@ -263,17 +263,14 @@ function buildHtml(report: CoverageReport, webview?: vscode.Webview, extensionUr
 <script>
   const vscode = acquireVsCodeApi();
 
-  // Click row to open file
   document.querySelectorAll('.file-row').forEach(row => {
     row.addEventListener('click', () => {
       vscode.postMessage({ command: 'openFile', path: row.dataset.path });
     });
   });
 
-  // Filter
   const filterInput = document.getElementById('filter');
   const noResults = document.getElementById('no-results');
-
   filterInput.addEventListener('input', applyFilter);
 
   function applyFilter() {
@@ -287,7 +284,6 @@ function buildHtml(report: CoverageReport, webview?: vscode.Webview, extensionUr
     noResults.style.display = visible === 0 ? 'block' : 'none';
   }
 
-  // Sort toggle
   let sortAsc = true;
   const tbody = document.getElementById('tbody');
   const sortBtn = document.getElementById('sort-btn');
@@ -298,7 +294,6 @@ function buildHtml(report: CoverageReport, webview?: vscode.Webview, extensionUr
     sortAsc = !sortAsc;
     sortIcon.textContent = sortAsc ? '↑' : '↓';
     sortLabel.textContent = sortAsc ? 'Lowest first' : 'Highest first';
-
     const rows = Array.from(tbody.querySelectorAll('.file-row'));
     rows.sort((a, b) => {
       const pa = parseFloat(a.dataset.pct);
