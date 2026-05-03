@@ -2,13 +2,13 @@
   "name": "coverage-visualizer",
   "displayName": "Python Coverage Visualizer",
   "description": "Visualize Python test coverage inline in VS Code — highlights, CodeLens, dashboard, and sidebar tree view",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "kool7",
   "engines": {
     "vscode": "^1.90.0"
   },
   "license": "MIT",
-  "icon": "assets/icon-128.png",
+  "icon": "assets/icon-256.png",
   "categories": [
     "Testing",
     "Visualization",
@@ -104,6 +104,11 @@
           "type": "string",
           "default": "coverage.json",
           "description": "Path to coverage.json relative to workspace root. Generate with: pytest --cov=. --cov-report=json"
+        },
+        "coverageVisualizer.excludeTestFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip decorations and CodeLens on test files (test_*.py, *_test.py, files inside tests/ directories)."
         }
       }
     }

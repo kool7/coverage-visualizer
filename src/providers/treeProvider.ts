@@ -3,6 +3,12 @@ import * as path from 'path';
 import { CoverageReport } from '../parsers/coverageParser.js';
 import { getConfig } from '../config.js';
 
+function isTestFile(fsPath: string): boolean {
+  const basename = path.basename(fsPath);
+  return basename.startsWith('test_') || basename.endsWith('_test.py') ||
+    fsPath.split(/[\\/]/).some(seg => seg === 'tests' || seg === 'test');
+}
+
 export class CoverageTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private report: CoverageReport | undefined;
   private _onDidChangeTreeData = new vscode.EventEmitter<void>();
@@ -28,8 +34,15 @@ export class CoverageTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     }
 
     const cfg = getConfig();
-    const { percentCovered, coveredStatements, numStatements } = this.report.totals;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+
+    // Compute filtered totals so the Overall line matches what the dashboard shows.
+    const filteredFiles = Object.entries(this.report.files)
+      .filter(([p]) => !cfg.excludeTestFiles || !isTestFile(p))
+      .map(([, d]) => d);
+    const coveredStatements = filteredFiles.reduce((n, f) => n + f.executedLines.length, 0);
+    const numStatements     = filteredFiles.reduce((n, f) => n + f.executedLines.length + f.missingLines.length, 0);
+    const percentCovered    = numStatements > 0 ? (coveredStatements / numStatements) * 100 : 0;
 
     const summaryIcon = percentCovered >= cfg.thresholdGood ? 'shield'
       : percentCovered >= cfg.thresholdWarn ? 'warning' : 'error';
@@ -39,8 +52,10 @@ export class CoverageTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     );
     summary.iconPath = new vscode.ThemeIcon(summaryIcon);
     summary.tooltip = `Source: ${this.report.source}`;
+    summary.command = { command: 'coverage-visualizer.showDashboard', title: 'Show Dashboard' };
 
     const fileItems = Object.entries(this.report.files)
+      .filter(([filePath]) => !cfg.excludeTestFiles || !isTestFile(filePath))
       .sort(([, a], [, b]) => a.percentCovered - b.percentCovered)
       .map(([filePath, data]) => {
         const label = filePath.split('/').pop() ?? filePath;

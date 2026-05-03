@@ -1,11 +1,18 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { CoverageReport, findFileInReport } from '../parsers/coverageParser.js';
 import { getConfig } from '../config.js';
+
+function isTestFile(fsPath: string): boolean {
+  const basename = path.basename(fsPath);
+  return basename.startsWith('test_') || basename.endsWith('_test.py') ||
+    fsPath.split(path.sep).some(seg => seg === 'tests' || seg === 'test');
+}
 
 export class CoverageCodeLensProvider implements vscode.CodeLensProvider {
   private report: CoverageReport | undefined;
   private _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
-  readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
+  readonly onDidChangeCodeLenses = _onDidChangeCodeLenses.event;
 
   setReport(report: CoverageReport | undefined) {
     this.report = report;
@@ -15,6 +22,7 @@ export class CoverageCodeLensProvider implements vscode.CodeLensProvider {
   provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
     const cfg = getConfig();
     if (!cfg.enableCodeLens || !this.report) return [];
+    if (cfg.excludeTestFiles && isTestFile(document.uri.fsPath)) return [];
 
     const fileCoverage = findFileInReport(this.report, document.uri.fsPath);
     if (!fileCoverage) return [];
