@@ -2,7 +2,7 @@
   "name": "coverage-visualizer",
   "displayName": "Python Coverage Visualizer",
   "description": "Visualize Python test coverage inline in VS Code — highlights, CodeLens, dashboard, and sidebar tree view",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "kool7",
   "engines": {
     "vscode": "^1.90.0"
