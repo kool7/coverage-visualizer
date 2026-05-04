@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { CoverageReport } from '../parsers/coverageParser.js';
 import { getConfig } from '../config.js';
 
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -11,9 +10,9 @@ export function initStatusBar(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem);
 }
 
-export function updateStatusBar(report: CoverageReport) {
+export function updateStatusBar(stats: { percentCovered: number; coveredStatements: number; numStatements: number }) {
   if (!statusBarItem) return;
-  const { percentCovered } = report.totals;
+  const { percentCovered } = stats;
   const { thresholdGood, thresholdWarn } = getConfig();
   const icon = percentCovered >= thresholdGood ? '$(shield)'
     : percentCovered >= thresholdWarn ? '$(warning)' : '$(error)';

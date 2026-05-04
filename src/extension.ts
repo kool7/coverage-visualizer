@@ -25,6 +25,12 @@ const codeLensProvider = new CoverageCodeLensProvider();
 const hoverProvider = new CoverageHoverProvider();
 const treeProvider = new CoverageTreeProvider();
 
+function isTestFile(fsPath: string): boolean {
+  const basename = path.basename(fsPath);
+  return basename.startsWith('test_') || basename.endsWith('_test.py') ||
+    fsPath.split(/[\\/]/).some(seg => seg === 'tests' || seg === 'test');
+}
+
 export function activate(context: vscode.ExtensionContext) {
   createDecorations();
   initStatusBar(context);
@@ -112,7 +118,7 @@ async function loadAndApply() {
     return;
   }
 
-  const { report, formatUsed } = result;
+  const { report } = result;
   currentReport = report;
 
   codeLensProvider.setReport(report);
@@ -120,13 +126,21 @@ async function loadAndApply() {
   treeProvider.setReport(report);
 
   vscode.window.visibleTextEditors.forEach(editor => applyToEditor(editor, currentReport!));
-  updateStatusBar(report);
-  updateDashboard(report);
 
-  const { percentCovered, coveredStatements, numStatements } = report.totals;
-  vscode.window.showInformationMessage(
-    `Coverage [${formatUsed}]: ${percentCovered.toFixed(1)}% — ${coveredStatements}/${numStatements} statements`
-  );
+  const { excludeTestFiles } = getConfig();
+  const filteredFiles = Object.entries(report.files)
+    .filter(([, d]) => d.executedLines.length + d.missingLines.length > 0)
+    .filter(([p]) => !excludeTestFiles || !isTestFile(p))
+    .map(([, d]) => d);
+  const filteredCovered = filteredFiles.reduce((n, f) => n + f.executedLines.length, 0);
+  const filteredTotal   = filteredFiles.reduce((n, f) => n + f.executedLines.length + f.missingLines.length, 0);
+  updateStatusBar({
+    percentCovered: filteredTotal > 0 ? (filteredCovered / filteredTotal) * 100 : 0,
+    coveredStatements: filteredCovered,
+    numStatements: filteredTotal,
+  });
+
+  updateDashboard(report);
 }
 
 async function detectAndParse(
