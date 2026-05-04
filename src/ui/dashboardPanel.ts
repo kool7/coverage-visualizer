@@ -25,12 +25,12 @@ export function showDashboard(report: CoverageReport, context: vscode.ExtensionC
         localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'assets')],
       }
     );
-    // ThemeIcon supported for WebviewPanel.iconPath since VS Code 1.87 (we target 1.90+).
+    // ThemeIcon is supported for WebviewPanel.iconPath since VS Code 1.87 (we target 1.90+).
     panel.iconPath = new vscode.ThemeIcon('graph');
     panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
   }
 
-  panel.webview.html = buildHtml(report, context.extensionUri);
+  panel.webview.html = buildHtml(report, panel.webview, context.extensionUri);
 
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
 
@@ -47,7 +47,7 @@ export function showDashboard(report: CoverageReport, context: vscode.ExtensionC
 }
 
 export function updateDashboard(report: CoverageReport) {
-  if (panel) panel.webview.html = buildHtml(report);
+  if (panel) panel.webview.html = buildHtml(report, panel.webview, undefined);
 }
 
 function buildHeaderIcon(extensionUri?: vscode.Uri): string {
@@ -56,7 +56,6 @@ function buildHeaderIcon(extensionUri?: vscode.Uri): string {
     const svgUri = vscode.Uri.joinPath(extensionUri, 'assets', 'icon-dashboard.svg');
     if (fs.existsSync(svgUri.fsPath)) {
       let svg = fs.readFileSync(svgUri.fsPath, 'utf-8') as string;
-      // Inline SVG inherits currentColor from CSS — correct on both light and dark themes.
       svg = svg.replace(/^(\s*<svg\b)/, '$1 class="h1-icon"');
       return svg;
     }
@@ -73,22 +72,14 @@ function colorClass(pct: number, thresholdGood: number, thresholdWarn: number): 
   return pct >= thresholdGood ? 'good' : pct >= thresholdWarn ? 'warn' : 'bad';
 }
 
-function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
+function buildHtml(report: CoverageReport, webview?: vscode.Webview, extensionUri?: vscode.Uri): string {
   const { thresholdGood, thresholdWarn, excludeTestFiles } = getConfig();
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
 
   const files = Object.entries(report.files)
-    .filter(([, data]) => data.executedLines.length + data.missingLines.length > 0)
     .filter(([filePath]) => !excludeTestFiles || !isTestFile(filePath))
-    .map(([filePath, data]) => {
-      const displayPath = filePath.startsWith(workspaceRoot)
-        ? filePath.slice(workspaceRoot.length).replace(/^[\\/]/, '')
-        : filePath;
-      return { filePath, displayPath, ...data };
-    })
+    .map(([filePath, data]) => ({ filePath, ...data }))
     .sort((a, b) => a.percentCovered - b.percentCovered);
 
-  // Recompute totals from the filtered list so ring and status bar always agree.
   const coveredStatements = files.reduce((n, f) => n + f.executedLines.length, 0);
   const numStatements = files.reduce((n, f) => n + f.executedLines.length + f.missingLines.length, 0);
   const percentCovered = numStatements > 0 ? (coveredStatements / numStatements) * 100 : 0;
@@ -98,8 +89,8 @@ function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
     const cls = colorClass(f.percentCovered, thresholdGood, thresholdWarn);
     const total = f.executedLines.length + f.missingLines.length;
     return `
-      <tr class="file-row" data-path="${f.filePath}" data-name="${f.displayPath.toLowerCase()}" data-pct="${f.percentCovered}">
-        <td class="filename">${f.displayPath}</td>
+      <tr class="file-row" data-path="${f.filePath}" data-name="${f.filePath.toLowerCase()}" data-pct="${f.percentCovered}">
+        <td class="filename">${f.filePath}</td>
         <td class="stat">${f.executedLines.length}/${total}</td>
         <td class="bar-cell">
           <div class="bar-track">
@@ -131,7 +122,7 @@ function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
     background: var(--vscode-editor-background);
     padding: 24px;
   }
-  h1 { display: flex; align-items: center; gap: 10px; font-size: 1.3em; font-weight: 600; margin-bottom: 24px; opacity: 0.9; }
+  h1 { font-size: 1.3em; font-weight: 600; margin-bottom: 24px; opacity: 0.9; display: flex; align-items: center; gap: 10px; }
   .h1-icon { width: 28px; height: 28px; flex-shrink: 0; }
   .summary {
     display: flex; align-items: center; gap: 40px;
@@ -154,21 +145,24 @@ function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
   .stat-label { opacity: 0.6; font-size: 0.85em; }
   .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .toolbar-left { display: flex; align-items: center; gap: 8px; flex: 1; }
-  h2 { font-size: 1em; font-weight: 600; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.05em; }
+  h2 { font-size: 1em; font-weight: 600; opacity: 0.8;
+    text-transform: uppercase; letter-spacing: 0.05em; }
   .file-count { opacity: 0.45; font-size: 0.82em; }
   .sort-btn {
     background: var(--vscode-button-secondaryBackground, #3c3c3c);
     color: var(--vscode-button-secondaryForeground, #ccc);
     border: 1px solid var(--vscode-widget-border, #555);
     border-radius: 4px; padding: 3px 9px; font-size: 0.82em;
-    cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap;
+    cursor: pointer; display: flex; align-items: center; gap: 4px;
+    white-space: nowrap;
   }
   .sort-btn:hover { background: var(--vscode-button-secondaryHoverBackground, #4a4a4a); }
   .filter-input {
     background: var(--vscode-input-background);
     border: 1px solid var(--vscode-input-border, #555);
     color: var(--vscode-input-foreground);
-    border-radius: 4px; padding: 4px 10px; font-size: 0.9em; width: 200px; outline: none;
+    border-radius: 4px; padding: 4px 10px; font-size: 0.9em; width: 200px;
+    outline: none;
   }
   .filter-input:focus { border-color: var(--vscode-focusBorder, #007fd4); }
   table { width: 100%; border-collapse: collapse; }
@@ -178,7 +172,8 @@ function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
   .file-row { cursor: pointer; transition: background 0.15s; }
   .file-row:hover { background: var(--vscode-list-hoverBackground); }
   .file-row.hidden { display: none; }
-  td { padding: 8px 10px; vertical-align: middle; border-bottom: 1px solid var(--vscode-widget-border, #222); }
+  td { padding: 8px 10px; vertical-align: middle;
+    border-bottom: 1px solid var(--vscode-widget-border, #222); }
   .filename {
     font-family: var(--vscode-editor-font-family, monospace); font-size: 0.9em;
     color: var(--vscode-textLink-foreground, #4daafc);
@@ -205,16 +200,29 @@ function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
   <div class="ring-wrap">
     <svg class="ring" viewBox="0 0 120 120">
       <circle class="ring-bg" cx="60" cy="60" r="54"/>
-      <circle class="ring-fill" cx="60" cy="60" r="54"
-        stroke="${ringColor}" stroke-dasharray="${filled} ${gap}"/>
-      <text class="ring-label" x="60" y="56" text-anchor="middle" dominant-baseline="middle">${percentCovered.toFixed(1)}%</text>
+      <circle class="ring-fill"
+        cx="60" cy="60" r="54"
+        stroke="${ringColor}"
+        stroke-dasharray="${filled} ${gap}"/>
+      <text class="ring-label" x="60" y="56" text-anchor="middle" dominant-baseline="middle">
+        ${percentCovered.toFixed(1)}%
+      </text>
       <text class="ring-sub" x="60" y="72" text-anchor="middle">covered</text>
     </svg>
   </div>
   <div class="stats">
-    <div class="stat-row"><span class="stat-num">${coveredStatements}</span><span class="stat-label">/ ${numStatements} statements covered</span></div>
-    <div class="stat-row"><span class="stat-num">${files.filter(f => f.percentCovered === 100).length}</span><span class="stat-label">files fully covered</span></div>
-    <div class="stat-row"><span class="stat-num" style="color:#e05c5c">${files.filter(f => f.percentCovered === 0).length}</span><span class="stat-label">files with zero coverage</span></div>
+    <div class="stat-row">
+      <span class="stat-num">${coveredStatements}</span>
+      <span class="stat-label">/ ${numStatements} statements covered</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-num">${files.filter(f => f.percentCovered === 100).length}</span>
+      <span class="stat-label">files fully covered</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-num" style="color:#e05c5c">${files.filter(f => f.percentCovered === 0).length}</span>
+      <span class="stat-label">files with zero coverage</span>
+    </div>
   </div>
 </div>
 
@@ -223,26 +231,40 @@ function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
     <h2>Files</h2>
     <span class="file-count">${files.length} total</span>
     <button class="sort-btn" id="sort-btn" title="Toggle sort order">
-      <span id="sort-icon">↑</span><span id="sort-label">Lowest first</span>
+      <span id="sort-icon">↑</span>
+      <span id="sort-label">Lowest first</span>
     </button>
   </div>
   <input class="filter-input" id="filter" type="text" placeholder="Filter files…" autocomplete="off"/>
 </div>
 <table>
-  <thead><tr><th>File</th><th style="text-align:right">Lines</th><th></th><th style="text-align:right">%</th></tr></thead>
+  <thead>
+    <tr>
+      <th>File</th>
+      <th style="text-align:right">Lines</th>
+      <th></th>
+      <th style="text-align:right">%</th>
+    </tr>
+  </thead>
   <tbody id="tbody">${fileRows}</tbody>
 </table>
 <div class="no-results" id="no-results">No files match your filter.</div>
+
 <p class="source-tag">Source: ${report.source}</p>
 
 <script>
   const vscode = acquireVsCodeApi();
+
   document.querySelectorAll('.file-row').forEach(row => {
-    row.addEventListener('click', () => vscode.postMessage({ command: 'openFile', path: row.dataset.path }));
+    row.addEventListener('click', () => {
+      vscode.postMessage({ command: 'openFile', path: row.dataset.path });
+    });
   });
+
   const filterInput = document.getElementById('filter');
   const noResults = document.getElementById('no-results');
   filterInput.addEventListener('input', applyFilter);
+
   function applyFilter() {
     const q = filterInput.value.toLowerCase();
     let visible = 0;
@@ -253,17 +275,23 @@ function buildHtml(report: CoverageReport, extensionUri?: vscode.Uri): string {
     });
     noResults.style.display = visible === 0 ? 'block' : 'none';
   }
+
   let sortAsc = true;
   const tbody = document.getElementById('tbody');
   const sortBtn = document.getElementById('sort-btn');
   const sortIcon = document.getElementById('sort-icon');
   const sortLabel = document.getElementById('sort-label');
+
   sortBtn.addEventListener('click', () => {
     sortAsc = !sortAsc;
     sortIcon.textContent = sortAsc ? '↑' : '↓';
     sortLabel.textContent = sortAsc ? 'Lowest first' : 'Highest first';
     const rows = Array.from(tbody.querySelectorAll('.file-row'));
-    rows.sort((a, b) => (sortAsc ? 1 : -1) * (parseFloat(a.dataset.pct) - parseFloat(b.dataset.pct)));
+    rows.sort((a, b) => {
+      const pa = parseFloat(a.dataset.pct);
+      const pb = parseFloat(b.dataset.pct);
+      return sortAsc ? pa - pb : pb - pa;
+    });
     rows.forEach(r => tbody.appendChild(r));
     applyFilter();
   });
