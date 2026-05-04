@@ -8,103 +8,35 @@
     "vscode": "^1.90.0"
   },
   "license": "MIT",
-  "icon": "assets/icon-128.png",
-  "categories": [
-    "Testing",
-    "Visualization",
-    "Other"
-  ],
-  "keywords": [
-    "python",
-    "coverage",
-    "test coverage",
-    "pytest",
-    "pytest-cov",
-    "visualization"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kool7/coverage-visualizer"
-  },
-  "activationEvents": [
-    "onStartupFinished",
-    "onView:coverageVisualizer.filesView"
-  ],
+  "icon": "assets/icon-256.png",
+  "categories": ["Testing", "Visualization", "Other"],
+  "keywords": ["python", "coverage", "test coverage", "pytest", "pytest-cov", "visualization"],
+  "repository": { "type": "git", "url": "https://github.com/kool7/coverage-visualizer" },
+  "activationEvents": ["onStartupFinished", "onView:coverageVisualizer.filesView"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "coverage-visualizer.show",
-        "title": "Coverage Visualizer: Show Coverage",
-        "icon": "$(shield)"
-      },
-      {
-        "command": "coverage-visualizer.clear",
-        "title": "Coverage Visualizer: Clear Coverage",
-        "icon": "$(close)"
-      },
-      {
-        "command": "coverage-visualizer.showDashboard",
-        "title": "Coverage Visualizer: Show Dashboard",
-        "icon": "$(graph)"
-      }
+      { "command": "coverage-visualizer.show", "title": "Coverage Visualizer: Show Coverage", "icon": "$(shield)" },
+      { "command": "coverage-visualizer.clear", "title": "Coverage Visualizer: Clear Coverage", "icon": "$(close)" },
+      { "command": "coverage-visualizer.showDashboard", "title": "Coverage Visualizer: Show Dashboard", "icon": "$(graph)" }
     ],
     "views": {
       "explorer": [
-        {
-          "id": "coverageVisualizer.filesView",
-          "name": "Coverage",
-          "when": "true"
-        }
+        { "id": "coverageVisualizer.filesView", "name": "Coverage", "when": "true" }
       ]
     },
     "configuration": {
       "title": "Coverage Visualizer",
       "properties": {
-        "coverageVisualizer.thresholdGood": {
-          "type": "number",
-          "default": 80,
-          "minimum": 0,
-          "maximum": 100,
-          "description": "Coverage % at or above which a file is considered well-covered (shown in green)."
-        },
-        "coverageVisualizer.thresholdWarn": {
-          "type": "number",
-          "default": 50,
-          "minimum": 0,
-          "maximum": 100,
-          "description": "Coverage % at or above which a file is a warning (yellow). Below this is red."
-        },
-        "coverageVisualizer.coveredHighlightColor": {
-          "type": "string",
-          "default": "rgba(0, 180, 0, 0.10)",
-          "description": "Background highlight color for covered lines. Any CSS color string."
-        },
-        "coverageVisualizer.uncoveredHighlightColor": {
-          "type": "string",
-          "default": "rgba(220, 50, 50, 0.10)",
-          "description": "Background highlight color for uncovered lines. Any CSS color string."
-        },
-        "coverageVisualizer.enableCodeLens": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show coverage % above each function and class definition."
-        },
-        "coverageVisualizer.enableHoverMessages": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show covered / not-covered tooltip when hovering a highlighted line."
-        },
-        "coverageVisualizer.autoReloadOnChange": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically reload coverage when coverage.json / coverage.xml / .coverage changes on disk."
-        },
-        "coverageVisualizer.coverageJsonPath": {
-          "type": "string",
-          "default": "coverage.json",
-          "description": "Path to coverage.json relative to workspace root. Generate with: pytest --cov=. --cov-report=json"
-        }
+        "coverageVisualizer.thresholdGood": { "type": "number", "default": 80, "minimum": 0, "maximum": 100, "description": "Coverage % at or above which a file is considered well-covered (shown in green)." },
+        "coverageVisualizer.thresholdWarn": { "type": "number", "default": 50, "minimum": 0, "maximum": 100, "description": "Coverage % at or above which a file is a warning (yellow). Below this is red." },
+        "coverageVisualizer.coveredHighlightColor": { "type": "string", "default": "rgba(0, 180, 0, 0.10)", "description": "Background highlight color for covered lines. Any CSS color string." },
+        "coverageVisualizer.uncoveredHighlightColor": { "type": "string", "default": "rgba(220, 50, 50, 0.10)", "description": "Background highlight color for uncovered lines. Any CSS color string." },
+        "coverageVisualizer.enableCodeLens": { "type": "boolean", "default": true, "description": "Show coverage % above each function and class definition." },
+        "coverageVisualizer.enableHoverMessages": { "type": "boolean", "default": true, "description": "Show covered / not-covered tooltip when hovering a highlighted line." },
+        "coverageVisualizer.autoReloadOnChange": { "type": "boolean", "default": true, "description": "Automatically reload coverage when coverage.json / coverage.xml / .coverage changes on disk." },
+        "coverageVisualizer.coverageJsonPath": { "type": "string", "default": "coverage.json", "description": "Path to coverage.json relative to workspace root. Generate with: pytest --cov=. --cov-report=json" },
+        "coverageVisualizer.excludeTestFiles": { "type": "boolean", "default": true, "description": "Skip decorations and CodeLens on test files (test_*.py, *_test.py, files inside tests/ directories)." }
       }
     }
   },
@@ -133,7 +65,5 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
   },
-  "dependencies": {
-    "sql.js": "^1.14.1"
-  }
+  "dependencies": { "sql.js": "^1.14.1" }
 }

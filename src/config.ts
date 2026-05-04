@@ -8,6 +8,7 @@ export interface Config {
   enableCodeLens: boolean;
   enableHoverMessages: boolean;
   autoReloadOnChange: boolean;
+  excludeTestFiles: boolean;
 }
 
 export function getConfig(): Config {
@@ -20,5 +21,6 @@ export function getConfig(): Config {
     enableCodeLens: cfg.get<boolean>('enableCodeLens', true),
     enableHoverMessages: cfg.get<boolean>('enableHoverMessages', true),
     autoReloadOnChange: cfg.get<boolean>('autoReloadOnChange', true),
+    excludeTestFiles: cfg.get<boolean>('excludeTestFiles', true),
   };
 }
