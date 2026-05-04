@@ -130,20 +130,61 @@ function decodeNumBits(buf: Uint8Array): number[] {
   return lines;
 }
 
-// Approximate missing lines by reading the source file (non-blank, non-comment lines).
+// Approximate missing lines by reading the source file.
+// Tracks triple-quoted strings and open brackets so continuation lines of
+// multi-line expressions (list literals, __all__, function args, etc.) are
+// not falsely counted as independent missing statements.
 function inferMissingLines(filePath: string, executedSet: Set<number>, workspaceRoot: string): number[] {
   const resolved = path.isAbsolute(filePath) ? filePath : path.join(workspaceRoot, filePath);
   if (!fs.existsSync(resolved)) return [];
-  const lines = fs.readFileSync(resolved, 'utf-8').split('\n');
+
+  const sourceLines = fs.readFileSync(resolved, 'utf-8').split('\n');
   const missing: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
+  let inTripleString = false;
+  let tripleDelim = '';
+  let bracketDepth = 0;
+
+  for (let i = 0; i < sourceLines.length; i++) {
     const lineNum = i + 1;
-    if (executedSet.has(lineNum)) continue;
-    const trimmed = lines[i].trim();
-    if (!trimmed || trimmed.startsWith('#') ||
-        trimmed.startsWith('"""') || trimmed.startsWith("'''")) continue;
-    missing.push(lineNum);
+    const trimmed = sourceLines[i].trim();
+
+    if (inTripleString) {
+      if (trimmed.includes(tripleDelim)) inTripleString = false;
+      continue;
+    }
+
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    if (bracketDepth > 0) {
+      for (const ch of trimmed) {
+        if (ch === '(' || ch === '[' || ch === '{') bracketDepth++;
+        else if (ch === ')' || ch === ']' || ch === '}') bracketDepth--;
+      }
+      continue;
+    }
+
+    const dqIdx = trimmed.indexOf('"""');
+    const sqIdx = trimmed.indexOf("'''");
+    const hasTriple = dqIdx !== -1 || sqIdx !== -1;
+    if (hasTriple) {
+      const delim = (dqIdx !== -1 && (sqIdx === -1 || dqIdx < sqIdx)) ? '"""' : "'''";
+      const openAt = trimmed.indexOf(delim);
+      const closeAt = trimmed.indexOf(delim, openAt + 3);
+      if (closeAt === -1) {
+        inTripleString = true;
+        tripleDelim = delim;
+        continue;
+      }
+    }
+
+    for (const ch of trimmed) {
+      if (ch === '(' || ch === '[' || ch === '{') bracketDepth++;
+      else if (ch === ')' || ch === ']' || ch === '}') bracketDepth--;
+    }
+
+    if (!executedSet.has(lineNum)) missing.push(lineNum);
   }
+
   return missing;
 }
 
@@ -176,20 +217,46 @@ export async function parseCoverageSqlite(coveragePath: string, workspaceRoot: s
     const fileRows = db.exec('SELECT id, path FROM file')[0];
     if (!fileRows) return { files: {}, totals: { numStatements: 0, coveredStatements: 0, percentCovered: 0 }, source: 'sqlite' };
 
-    for (const [id, filePath] of fileRows.values as [number, string][]) {
-      const stmt = db.prepare('SELECT numbits FROM line_bits WHERE file_id = ?');
-      stmt.bind([id]);
+    // Detect whether this .coverage used branch tracking (arc table) or simple
+    // line tracking (line_bits). branch=true in pyproject/setup.cfg writes only
+    // to arc; branch=false (default) writes only to line_bits.
+    let useArcs = false;
+    try {
+      const arcCount = db.exec('SELECT COUNT(*) FROM arc')[0]?.values[0][0] as number ?? 0;
+      useArcs = arcCount > 0;
+    } catch {
+      useArcs = false;
+    }
 
+    for (const [id, filePath] of fileRows.values as [number, string][]) {
       const executedSet = new Set<number>();
-      while (stmt.step()) {
-        const row = stmt.getAsObject() as { numbits: Uint8Array };
-        for (const line of decodeNumBits(row.numbits)) executedSet.add(line);
+
+      if (useArcs) {
+        // Branch mode: rows are (fromno, tono) arcs. Negative values are virtual
+        // entry/exit markers. Any positive value means that line was executed.
+        const stmt = db.prepare('SELECT fromno, tono FROM arc WHERE file_id = ?');
+        stmt.bind([id]);
+        while (stmt.step()) {
+          const { fromno, tono } = stmt.getAsObject() as { fromno: number; tono: number };
+          if (fromno > 0) executedSet.add(fromno);
+          if (tono > 0) executedSet.add(tono);
+        }
+        stmt.free();
+      } else {
+        const stmt = db.prepare('SELECT numbits FROM line_bits WHERE file_id = ?');
+        stmt.bind([id]);
+        while (stmt.step()) {
+          const row = stmt.getAsObject() as { numbits: Uint8Array };
+          for (const line of decodeNumBits(row.numbits)) executedSet.add(line);
+        }
+        stmt.free();
       }
-      stmt.free();
 
       const executedLines = [...executedSet].sort((a, b) => a - b);
       const missingLines = inferMissingLines(filePath as string, executedSet, workspaceRoot);
       const total = executedLines.length + missingLines.length;
+
+      if (total === 0) continue;
 
       totalStmts += total;
       totalCovered += executedLines.length;
@@ -198,7 +265,7 @@ export async function parseCoverageSqlite(coveragePath: string, workspaceRoot: s
         executedLines,
         missingLines,
         excludedLines: [],
-        percentCovered: total > 0 ? (executedLines.length / total) * 100 : 100,
+        percentCovered: (executedLines.length / total) * 100,
       };
     }
 
@@ -207,7 +274,7 @@ export async function parseCoverageSqlite(coveragePath: string, workspaceRoot: s
       totals: {
         numStatements: totalStmts,
         coveredStatements: totalCovered,
-        percentCovered: totalStmts > 0 ? (totalCovered / totalStmts) * 100 : 100,
+        percentCovered: totalStmts > 0 ? (totalCovered / totalStmts) * 100 : 0,
       },
       source: 'sqlite',
     };
