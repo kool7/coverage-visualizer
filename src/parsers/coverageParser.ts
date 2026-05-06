@@ -289,9 +289,11 @@ export function findFileInReport(
   report: CoverageReport,
   absolutePath: string
 ): FileCoverage | undefined {
-  return Object.entries(report.files).find(([key]) =>
-    absolutePath.endsWith(key) || absolutePath.includes(key)
-  )?.[1];
+  const normalized = absolutePath.replace(/\\/g, '/');
+  return Object.entries(report.files).find(([key]) => {
+    const normalizedKey = key.replace(/\\/g, '/');
+    return normalized.endsWith(normalizedKey) || normalized.includes(normalizedKey);
+  })?.[1];
 }
 
 export function toLineRanges(lines: number[]): Array<{ start: number; end: number }> {
