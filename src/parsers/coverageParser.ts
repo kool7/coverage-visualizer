@@ -289,9 +289,9 @@ export function findFileInReport(
   report: CoverageReport,
   absolutePath: string
 ): FileCoverage | undefined {
-  const normalized = absolutePath.replace(/\\/g, '/');
+  const normalized = absolutePath.replace(/\\/g, '/').toLowerCase();
   return Object.entries(report.files).find(([key]) => {
-    const normalizedKey = key.replace(/\\/g, '/');
+    const normalizedKey = key.replace(/\\/g, '/').toLowerCase();
     return normalized.endsWith(normalizedKey) || normalized.includes(normalizedKey);
   })?.[1];
 }

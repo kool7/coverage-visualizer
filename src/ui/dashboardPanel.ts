@@ -75,9 +75,17 @@ function colorClass(pct: number, thresholdGood: number, thresholdWarn: number): 
 function buildHtml(report: CoverageReport, webview?: vscode.Webview, extensionUri?: vscode.Uri): string {
   const { thresholdGood, thresholdWarn, excludeTestFiles } = getConfig();
 
+  const workspaceRoot = (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '').replace(/\\/g, '/');
+
   const files = Object.entries(report.files)
     .filter(([filePath]) => !excludeTestFiles || !isTestFile(filePath))
-    .map(([filePath, data]) => ({ filePath, ...data }))
+    .map(([filePath, data]) => {
+      const normalized = filePath.replace(/\\/g, '/');
+      const displayPath = workspaceRoot && normalized.toLowerCase().startsWith(workspaceRoot.toLowerCase())
+        ? normalized.slice(workspaceRoot.length).replace(/^\//, '')
+        : normalized;
+      return ({ filePath, displayPath, ...data });
+    })
     .sort((a, b) => a.percentCovered - b.percentCovered);
 
   const coveredStatements = files.reduce((n, f) => n + f.executedLines.length, 0);
@@ -89,8 +97,8 @@ function buildHtml(report: CoverageReport, webview?: vscode.Webview, extensionUr
     const cls = colorClass(f.percentCovered, thresholdGood, thresholdWarn);
     const total = f.executedLines.length + f.missingLines.length;
     return `
-      <tr class="file-row" data-path="${f.filePath}" data-name="${f.filePath.toLowerCase()}" data-pct="${f.percentCovered}">
-        <td class="filename">${f.filePath}</td>
+      <tr class="file-row" data-path="${f.filePath}" data-name="${f.displayPath.toLowerCase()}" data-pct="${f.percentCovered}">
+        <td class="filename">${f.displayPath}</td>
         <td class="stat">${f.executedLines.length}/${total}</td>
         <td class="bar-cell">
           <div class="bar-track">
