@@ -230,6 +230,16 @@ async function detectAndParse(
 
   const sqlitePath = path.join(workspaceFolder, '.coverage');
   if (fs.existsSync(sqlitePath)) {
+    const python = resolvePython(workspaceFolder);
+    const generated = await new Promise<boolean>(resolve => {
+      exec(`"${python}" -m coverage json`, { cwd: workspaceFolder }, err => resolve(!err));
+    });
+    if (generated && fs.existsSync(jsonPath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf-8')) as RawCoverageJson;
+        return { report: parseCoverageJson(raw), formatUsed: 'coverage.json' };
+      } catch { /* fall through */ }
+    }
     try {
       return { report: await parseCoverageSqlite(sqlitePath, workspaceFolder), formatUsed: '.coverage' };
     } catch (err) {
