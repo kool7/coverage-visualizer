@@ -203,6 +203,9 @@ async function handleNoCoverage(workspaceFolder: string) {
     proc.on('close', code => {
       coverageRunInProgress = false;
       coverageOutputChannel!.appendLine(`\n[exited ${code ?? '?'}]`);
+      if (code !== 0) {
+        vscode.window.showWarningMessage('pytest failed — check the Coverage Run output panel.');
+      }
     });
   } finally {
     noCoveragePromptActive = false;
