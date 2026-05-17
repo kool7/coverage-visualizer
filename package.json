@@ -109,6 +109,11 @@
           "type": "boolean",
           "default": true,
           "description": "Skip decorations and CodeLens on test files (test_*.py, *_test.py, files inside tests/ directories)."
+        },
+        "coverageVisualizer.autoRunOnTestChange": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically re-run pytest and refresh coverage when a test file is saved. Disable if your test suite is too slow to run on every save."
         }
       }
     }

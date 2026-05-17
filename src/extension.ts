@@ -11,7 +11,7 @@ import {
   CoverageReport,
   RawCoverageJson,
 } from './parsers/coverageParser.js';
-import { initStatusBar, updateStatusBar, clearStatusBar } from './ui/statusBar.js';
+import { initStatusBar, updateStatusBar, clearStatusBar, showRunningStatusBar } from './ui/statusBar.js';
 import { showDashboard, updateDashboard } from './ui/dashboardPanel.js';
 import { getConfig } from './config.js';
 import { CoverageCodeLensProvider } from './providers/codeLensProvider.js';
@@ -24,6 +24,7 @@ let currentReport: CoverageReport | undefined;
 let coverageRunInProgress = false;
 let noCoveragePromptActive = false;
 let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+let testChangeTimer: ReturnType<typeof setTimeout> | undefined;
 let coverageOutputChannel: vscode.OutputChannel | undefined;
 
 const codeLensProvider = new CoverageCodeLensProvider();
@@ -108,6 +109,18 @@ function setupWatchers(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(w);
   });
+
+  const testWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(root, '{test_*.py,*_test.py,tests/**/*.py,test/**/*.py}')
+  );
+  const debouncedTestRun = () => {
+    if (!getConfig().autoRunOnTestChange) return;
+    clearTimeout(testChangeTimer);
+    testChangeTimer = setTimeout(() => runPytestSilently(root.uri.fsPath), 2000);
+  };
+  testWatcher.onDidChange(debouncedTestRun);
+  testWatcher.onDidCreate(debouncedTestRun);
+  context.subscriptions.push(testWatcher);
 }
 
 async function loadAndApply() {
@@ -164,6 +177,41 @@ function checkPython(python: string, cwd: string, code: string): Promise<boolean
   });
 }
 
+function spawnPytest(python: string, args: string[], workspaceFolder: string) {
+  coverageRunInProgress = true;
+  showRunningStatusBar();
+  coverageOutputChannel ??= vscode.window.createOutputChannel('Coverage Run');
+  coverageOutputChannel.clear();
+  coverageOutputChannel.appendLine(`$ ${python} ${args.join(' ')}\n`);
+
+  const proc = spawn(python, args, { cwd: workspaceFolder });
+  proc.stdout.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
+  proc.stderr.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
+  proc.on('close', code => {
+    coverageRunInProgress = false;
+    coverageOutputChannel!.appendLine(`\n[exited ${code ?? '?'}]`);
+    if (code !== 0) {
+      vscode.window.showWarningMessage('pytest failed — check the Coverage Run output panel.');
+    } else {
+      loadAndApply();
+    }
+  });
+}
+
+async function runPytestSilently(workspaceFolder: string) {
+  if (coverageRunInProgress) return;
+  const python = resolvePython(workspaceFolder);
+  const [hasPytestCov, hasCoverage] = await Promise.all([
+    checkPython(python, workspaceFolder, 'import pytest_cov'),
+    checkPython(python, workspaceFolder, 'import coverage'),
+  ]);
+  if (!hasCoverage) return;
+  const args = hasPytestCov
+    ? ['-m', 'pytest', '--cov=.', '--cov-report=json']
+    : ['-m', 'coverage', 'run', '-m', 'pytest'];
+  spawnPytest(python, args, workspaceFolder);
+}
+
 async function handleNoCoverage(workspaceFolder: string) {
   if (noCoveragePromptActive) return;
   noCoveragePromptActive = true;
@@ -191,22 +239,8 @@ async function handleNoCoverage(workspaceFolder: string) {
       ? ['-m', 'pytest', '--cov=.', '--cov-report=json']
       : ['-m', 'coverage', 'run', '-m', 'pytest'];
 
-    coverageRunInProgress = true;
-    coverageOutputChannel ??= vscode.window.createOutputChannel('Coverage Run');
-    coverageOutputChannel.clear();
-    coverageOutputChannel.show(true);
-    coverageOutputChannel.appendLine(`$ ${python} ${args.join(' ')}\n`);
-
-    const proc = spawn(python, args, { cwd: workspaceFolder });
-    proc.stdout.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
-    proc.stderr.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
-    proc.on('close', code => {
-      coverageRunInProgress = false;
-      coverageOutputChannel!.appendLine(`\n[exited ${code ?? '?'}]`);
-      if (code !== 0) {
-        vscode.window.showWarningMessage('pytest failed — check the Coverage Run output panel.');
-      }
-    });
+    coverageOutputChannel?.show(true);
+    spawnPytest(python, args, workspaceFolder);
   } finally {
     noCoveragePromptActive = false;
   }

@@ -24,6 +24,13 @@ export function updateStatusBar(stats: { percentCovered: number; coveredStatemen
   statusBarItem.show();
 }
 
+export function showRunningStatusBar() {
+  if (!statusBarItem) return;
+  statusBarItem.text = '$(sync~spin) Running coverage…';
+  statusBarItem.backgroundColor = undefined;
+  statusBarItem.show();
+}
+
 export function clearStatusBar() {
   statusBarItem?.hide();
 }
