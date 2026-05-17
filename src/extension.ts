@@ -26,6 +26,8 @@ let noCoveragePromptActive = false;
 let reloadTimer: ReturnType<typeof setTimeout> | undefined;
 let testChangeTimer: ReturnType<typeof setTimeout> | undefined;
 let coverageOutputChannel: vscode.OutputChannel | undefined;
+let runningProc: ReturnType<typeof spawn> | undefined;
+let cachedPytestEnv: { hasPytestCov: boolean; hasCoverage: boolean } | undefined;
 
 const codeLensProvider = new CoverageCodeLensProvider();
 const hoverProvider = new CoverageHoverProvider();
@@ -58,6 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.workspace.onDidChangeConfiguration(e => {
       if (!e.affectsConfiguration('coverageVisualizer')) return;
+      cachedPytestEnv = undefined;
       coveredDecoration.dispose();
       uncoveredDecoration.dispose();
       createDecorations();
@@ -111,7 +114,7 @@ function setupWatchers(context: vscode.ExtensionContext) {
   });
 
   const testWatcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(root, '{test_*.py,*_test.py,tests/**/*.py,test/**/*.py}')
+    new vscode.RelativePattern(root, '{test_*.py,*_test.py,tests/**/*.py,test/**/*.py,**/conftest.py}')
   );
   const debouncedTestRun = () => {
     if (!getConfig().autoRunOnTestChange) return;
@@ -181,16 +184,18 @@ function spawnPytest(python: string, args: string[], workspaceFolder: string) {
   coverageRunInProgress = true;
   showRunningStatusBar();
   coverageOutputChannel ??= vscode.window.createOutputChannel('Coverage Run');
-  coverageOutputChannel.clear();
+  coverageOutputChannel.appendLine(`\n${'─'.repeat(60)}`);
   coverageOutputChannel.appendLine(`$ ${python} ${args.join(' ')}\n`);
 
-  const proc = spawn(python, args, { cwd: workspaceFolder });
-  proc.stdout.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
-  proc.stderr.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
-  proc.on('close', code => {
+  runningProc = spawn(python, args, { cwd: workspaceFolder });
+  runningProc.stdout!.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
+  runningProc.stderr!.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
+  runningProc.on('close', code => {
+    runningProc = undefined;
     coverageRunInProgress = false;
     coverageOutputChannel!.appendLine(`\n[exited ${code ?? '?'}]`);
     if (code !== 0) {
+      clearStatusBar();
       vscode.window.showWarningMessage('pytest failed — check the Coverage Run output panel.');
     } else {
       loadAndApply();
@@ -200,16 +205,27 @@ function spawnPytest(python: string, args: string[], workspaceFolder: string) {
 
 async function runPytestSilently(workspaceFolder: string) {
   if (coverageRunInProgress) return;
-  const python = resolvePython(workspaceFolder);
-  const [hasPytestCov, hasCoverage] = await Promise.all([
-    checkPython(python, workspaceFolder, 'import pytest_cov'),
-    checkPython(python, workspaceFolder, 'import coverage'),
-  ]);
-  if (!hasCoverage) return;
-  const args = hasPytestCov
-    ? ['-m', 'pytest', '--cov=.', '--cov-report=json']
-    : ['-m', 'coverage', 'run', '-m', 'pytest'];
-  spawnPytest(python, args, workspaceFolder);
+  coverageRunInProgress = true;
+  try {
+    const python = resolvePython(workspaceFolder);
+    if (!cachedPytestEnv) {
+      const [hasPytestCov, hasCoverage] = await Promise.all([
+        checkPython(python, workspaceFolder, 'import pytest_cov'),
+        checkPython(python, workspaceFolder, 'import coverage'),
+      ]);
+      cachedPytestEnv = { hasPytestCov, hasCoverage };
+    }
+    if (!cachedPytestEnv.hasCoverage) {
+      coverageRunInProgress = false;
+      return;
+    }
+    const args = cachedPytestEnv.hasPytestCov
+      ? ['-m', 'pytest', '--cov=.', '--cov-report=json']
+      : ['-m', 'coverage', 'run', '-m', 'pytest'];
+    spawnPytest(python, args, workspaceFolder);
+  } catch {
+    coverageRunInProgress = false;
+  }
 }
 
 async function handleNoCoverage(workspaceFolder: string) {
@@ -336,6 +352,9 @@ function linesToDecorations(lines: number[]): vscode.DecorationOptions[] {
 }
 
 export function deactivate() {
+  clearTimeout(reloadTimer);
+  clearTimeout(testChangeTimer);
+  runningProc?.kill();
   coveredDecoration?.dispose();
   uncoveredDecoration?.dispose();
   coverageOutputChannel?.dispose();
