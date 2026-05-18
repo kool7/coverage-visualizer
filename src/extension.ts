@@ -123,6 +123,7 @@ function setupWatchers(context: vscode.ExtensionContext) {
   };
   testWatcher.onDidChange(debouncedTestRun);
   testWatcher.onDidCreate(debouncedTestRun);
+  testWatcher.onDidDelete(debouncedTestRun);
   context.subscriptions.push(testWatcher);
 }
 
