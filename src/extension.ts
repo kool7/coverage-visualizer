@@ -11,7 +11,7 @@ import {
   CoverageReport,
   RawCoverageJson,
 } from './parsers/coverageParser.js';
-import { initStatusBar, updateStatusBar, clearStatusBar } from './ui/statusBar.js';
+import { initStatusBar, updateStatusBar, clearStatusBar, showRunningStatusBar } from './ui/statusBar.js';
 import { showDashboard, updateDashboard } from './ui/dashboardPanel.js';
 import { getConfig } from './config.js';
 import { CoverageCodeLensProvider } from './providers/codeLensProvider.js';
@@ -24,13 +24,19 @@ let currentReport: CoverageReport | undefined;
 let coverageRunInProgress = false;
 let noCoveragePromptActive = false;
 let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+let testChangeTimer: ReturnType<typeof setTimeout> | undefined;
 let coverageOutputChannel: vscode.OutputChannel | undefined;
+let runningProc: ReturnType<typeof spawn> | undefined;
+let cachedPytestEnv: { hasPytestCov: boolean; hasCoverage: boolean } | undefined;
+let extensionContext: vscode.ExtensionContext | undefined;
+let showDashboardPending = false;
 
 const codeLensProvider = new CoverageCodeLensProvider();
 const hoverProvider = new CoverageHoverProvider();
 const treeProvider = new CoverageTreeProvider();
 
 export function activate(context: vscode.ExtensionContext) {
+  extensionContext = context;
   createDecorations();
   initStatusBar(context);
 
@@ -44,19 +50,16 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('coverage-visualizer.show', loadAndApply),
     vscode.commands.registerCommand('coverage-visualizer.clear', clearCoverage),
     vscode.commands.registerCommand('coverage-visualizer.showDashboard', () => {
-      if (currentReport) {
-        showDashboard(currentReport, context);
-      } else {
-        loadAndApply().then(() => {
-          if (currentReport) showDashboard(currentReport, context);
-        });
-      }
+      if (currentReport) showDashboard(currentReport, context);
+      showDashboardPending = true;
+      loadAndApply();
     }),
     vscode.window.onDidChangeActiveTextEditor(editor => {
       if (editor && currentReport) applyToEditor(editor, currentReport);
     }),
     vscode.workspace.onDidChangeConfiguration(e => {
       if (!e.affectsConfiguration('coverageVisualizer')) return;
+      cachedPytestEnv = undefined;
       coveredDecoration.dispose();
       uncoveredDecoration.dispose();
       createDecorations();
@@ -108,6 +111,19 @@ function setupWatchers(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(w);
   });
+
+  const testWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(root, '{test_*.py,*_test.py,tests/**/*.py,test/**/*.py,**/conftest.py}')
+  );
+  const debouncedTestRun = () => {
+    if (!getConfig().autoRunOnTestChange) return;
+    clearTimeout(testChangeTimer);
+    testChangeTimer = setTimeout(() => runPytestSilently(root.uri.fsPath), 2000);
+  };
+  testWatcher.onDidChange(debouncedTestRun);
+  testWatcher.onDidCreate(debouncedTestRun);
+  testWatcher.onDidDelete(debouncedTestRun);
+  context.subscriptions.push(testWatcher);
 }
 
 async function loadAndApply() {
@@ -144,7 +160,12 @@ async function loadAndApply() {
     numStatements: filteredTotal,
   });
 
-  updateDashboard(report);
+  if (showDashboardPending && extensionContext) {
+    showDashboard(report, extensionContext);
+    showDashboardPending = false;
+  } else {
+    updateDashboard(report);
+  }
 }
 
 function resolvePython(workspaceFolder: string): string {
@@ -162,6 +183,54 @@ function checkPython(python: string, cwd: string, code: string): Promise<boolean
   return new Promise(resolve => {
     exec(`"${python}" -c "${code}"`, { cwd }, err => resolve(!err));
   });
+}
+
+function spawnPytest(python: string, args: string[], workspaceFolder: string) {
+  coverageRunInProgress = true;
+  showRunningStatusBar();
+  coverageOutputChannel ??= vscode.window.createOutputChannel('Coverage Run');
+  coverageOutputChannel.appendLine(`\n${'─'.repeat(60)}`);
+  coverageOutputChannel.appendLine(`$ ${python} ${args.join(' ')}\n`);
+
+  runningProc = spawn(python, args, { cwd: workspaceFolder });
+  runningProc.stdout!.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
+  runningProc.stderr!.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
+  runningProc.on('close', code => {
+    runningProc = undefined;
+    coverageRunInProgress = false;
+    coverageOutputChannel!.appendLine(`\n[exited ${code ?? '?'}]`);
+    if (code !== 0) {
+      clearStatusBar();
+      vscode.window.showWarningMessage('pytest failed — check the Coverage Run output panel.');
+    } else {
+      loadAndApply();
+    }
+  });
+}
+
+async function runPytestSilently(workspaceFolder: string) {
+  if (coverageRunInProgress) return;
+  coverageRunInProgress = true;
+  try {
+    const python = resolvePython(workspaceFolder);
+    if (!cachedPytestEnv) {
+      const [hasPytestCov, hasCoverage] = await Promise.all([
+        checkPython(python, workspaceFolder, 'import pytest_cov'),
+        checkPython(python, workspaceFolder, 'import coverage'),
+      ]);
+      cachedPytestEnv = { hasPytestCov, hasCoverage };
+    }
+    if (!cachedPytestEnv.hasCoverage) {
+      coverageRunInProgress = false;
+      return;
+    }
+    const args = cachedPytestEnv.hasPytestCov
+      ? ['-m', 'pytest', '--cov=.', '--cov-report=']
+      : ['-m', 'coverage', 'run', '-m', 'pytest'];
+    spawnPytest(python, args, workspaceFolder);
+  } catch {
+    coverageRunInProgress = false;
+  }
 }
 
 async function handleNoCoverage(workspaceFolder: string) {
@@ -188,25 +257,11 @@ async function handleNoCoverage(workspaceFolder: string) {
     if (choice !== 'Run pytest') return;
 
     const args = hasPytestCov
-      ? ['-m', 'pytest', '--cov=.', '--cov-report=json']
+      ? ['-m', 'pytest', '--cov=.', '--cov-report=']
       : ['-m', 'coverage', 'run', '-m', 'pytest'];
 
-    coverageRunInProgress = true;
-    coverageOutputChannel ??= vscode.window.createOutputChannel('Coverage Run');
-    coverageOutputChannel.clear();
-    coverageOutputChannel.show(true);
-    coverageOutputChannel.appendLine(`$ ${python} ${args.join(' ')}\n`);
-
-    const proc = spawn(python, args, { cwd: workspaceFolder });
-    proc.stdout.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
-    proc.stderr.on('data', (d: Buffer) => coverageOutputChannel!.append(d.toString()));
-    proc.on('close', code => {
-      coverageRunInProgress = false;
-      coverageOutputChannel!.appendLine(`\n[exited ${code ?? '?'}]`);
-      if (code !== 0) {
-        vscode.window.showWarningMessage('pytest failed — check the Coverage Run output panel.');
-      }
-    });
+    coverageOutputChannel?.show(true);
+    spawnPytest(python, args, workspaceFolder);
   } finally {
     noCoveragePromptActive = false;
   }
@@ -217,22 +272,17 @@ async function detectAndParse(
 ): Promise<{ report: CoverageReport; formatUsed: string } | undefined> {
 
   const jsonPath = path.join(workspaceFolder, 'coverage.json');
-  if (fs.existsSync(jsonPath)) {
-    try {
-      const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf-8')) as RawCoverageJson;
-      return { report: parseCoverageJson(raw), formatUsed: 'coverage.json' };
-    } catch { /* fall through */ }
-  }
-
-  const xmlPath = path.join(workspaceFolder, 'coverage.xml');
-  if (fs.existsSync(xmlPath)) {
-    try {
-      return { report: parseCoverageXml(fs.readFileSync(xmlPath, 'utf-8')), formatUsed: 'coverage.xml' };
-    } catch { /* fall through */ }
-  }
-
   const sqlitePath = path.join(workspaceFolder, '.coverage');
-  if (fs.existsSync(sqlitePath)) {
+
+  const jsonExists = fs.existsSync(jsonPath);
+  const sqliteExists = fs.existsSync(sqlitePath);
+
+  // Prefer .coverage → coverage json when .coverage is newer than coverage.json.
+  // This ensures branch coverage config from the project is always respected.
+  const sqliteIsNewer = sqliteExists && jsonExists &&
+    fs.statSync(sqlitePath).mtimeMs > fs.statSync(jsonPath).mtimeMs;
+
+  if (sqliteExists && (!jsonExists || sqliteIsNewer)) {
     const python = resolvePython(workspaceFolder);
     const generated = await new Promise<boolean>(resolve => {
       exec(`"${python}" -m coverage json`, { cwd: workspaceFolder }, err => resolve(!err));
@@ -249,7 +299,22 @@ async function detectAndParse(
       vscode.window.showErrorMessage(
         `Coverage Visualizer: Failed to read .coverage — ${err instanceof Error ? err.message : String(err)}`
       );
+      return undefined;
     }
+  }
+
+  if (jsonExists) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf-8')) as RawCoverageJson;
+      return { report: parseCoverageJson(raw), formatUsed: 'coverage.json' };
+    } catch { /* fall through */ }
+  }
+
+  const xmlPath = path.join(workspaceFolder, 'coverage.xml');
+  if (fs.existsSync(xmlPath)) {
+    try {
+      return { report: parseCoverageXml(fs.readFileSync(xmlPath, 'utf-8')), formatUsed: 'coverage.xml' };
+    } catch { /* fall through */ }
   }
 
   return undefined;
@@ -302,6 +367,9 @@ function linesToDecorations(lines: number[]): vscode.DecorationOptions[] {
 }
 
 export function deactivate() {
+  clearTimeout(reloadTimer);
+  clearTimeout(testChangeTimer);
+  runningProc?.kill();
   coveredDecoration?.dispose();
   uncoveredDecoration?.dispose();
   coverageOutputChannel?.dispose();

@@ -9,6 +9,7 @@ export interface Config {
   enableHoverMessages: boolean;
   autoReloadOnChange: boolean;
   excludeTestFiles: boolean;
+  autoRunOnTestChange: boolean;
 }
 
 export function getConfig(): Config {
@@ -22,5 +23,6 @@ export function getConfig(): Config {
     enableHoverMessages: cfg.get<boolean>('enableHoverMessages', true),
     autoReloadOnChange: cfg.get<boolean>('autoReloadOnChange', true),
     excludeTestFiles: cfg.get<boolean>('excludeTestFiles', true),
+    autoRunOnTestChange: cfg.get<boolean>('autoRunOnTestChange', true),
   };
 }
