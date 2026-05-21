@@ -20,6 +20,9 @@ demo-python-project/
 # Local dev scripts (not part of the extension)
 scripts/verify-sqlite-parse.mjs
 
+# Original/archived assets — not shipped in the extension
+assets/archive/
+
 # macOS
 .DS_Store
 
